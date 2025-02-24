@@ -6,7 +6,7 @@ from statsmodels.tsa.stattools import adfuller, coint
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
 import matplotlib.pyplot as plt
 
-tickers = ['NVDA', 'TSM']
+tickers = ['SHEL', 'CVX']
 
 def coint_test(tickers):
 
@@ -65,7 +65,7 @@ def coint_test(tickers):
     print(f"  p-value       : {pvalue:.4f}\n")
 
     #Johanssen cointegration test (VECM)
-    johansen_result = coint_johansen(data[[tickers[0], tickers[1]]], det_order=0, k_ar_diff=1)
+    johansen_result = coint_johansen(data[[tickers[0], tickers[1]]], det_order=1, k_ar_diff=1)
     print("Johansen Cointegration Test Results:")
     print("Eigenvalues:")
     print(johansen_result.eig)
@@ -73,3 +73,5 @@ def coint_test(tickers):
     print(johansen_result.lr1)
     print("\nCritical Values (90%, 95%, 99%):")
     print(johansen_result.cvt)
+
+coint_test(tickers)
