@@ -15,6 +15,7 @@ def download_data(tickers, start = '2015-01-01', end = '2025-01-01'):
     data = data.dropna()
     return data
 
+# Verify no stationarity and cointegration tests
 def coint_test(tickers):
 
     data = download_data(tickers)
@@ -75,5 +76,49 @@ def coint_test(tickers):
     print(johansen_result.lr1)
     print("\nCritical Values (90%, 95%, 99%):")
     print(johansen_result.cvt)
+
+    # Adding the trading signals
+    beta = johansen_result.evec[:, 0]
+    beta = beta / beta[0]
+    print(f"Cointegrating vector (normalized): {beta}")
+
+    # Calculate the normalized spread
+    spread_vec = data[tickers[0]] + beta[1] * data[tickers[1]]
+    
+    spread_mean = spread_vec.mean()
+    spread_std = spread_vec.std()
+    print(f"Spread Mean: {spread_mean:.4f}, Spread STD: {spread_std:.4f}")
+
+    #Generating the signals and adding them to a data frame
+    signal = np.where(spread_vec > spread_mean + 1.5*spread_std, -1,
+                      np.where(spread_vec < spread_mean - 1.5*spread_std, 1, 0))
+
+    signals_df = pd.DataFrame({
+        'Spread': spread_vec,
+        'Signal': signal
+    }, index=spread_vec.index)
+
+    #Plotting
+    plt.figure(figsize=(10,6))
+    plt.plot(spread_vec.index, spread_vec, label='Spread')
+    plt.axhline(spread_mean, color='black', linestyle='--', label='Mean')
+    plt.axhline(spread_mean + 1.5*spread_std, color='red', linestyle='--', label='+1.5 STD')
+    plt.axhline(spread_mean - 1.5*spread_std, color='green', linestyle='--', label='-1.5 STD')
+    plt.legend()
+    plt.title('Cointegration Spread and Threshold Levels')
+    plt.show()
+
+    # Plotting where the trading signals occur
+    plt.figure(figsize=(10,6))
+    plt.plot(spread_vec.index, spread_vec, label='Spread')
+    plt.scatter(spread_vec.index[signal == 1], spread_vec[signal == 1], marker='^', color='green', label='Long Signal', s=100)
+    plt.scatter(spread_vec.index[signal == -1], spread_vec[signal == -1], marker='v', color='red', label='Short Signal', s=100)
+    plt.axhline(spread_mean, color='black', linestyle='--', label='Mean')
+    plt.axhline(spread_mean + 1.5*spread_std, color='red', linestyle='--', label='+1.5 STD')
+    plt.axhline(spread_mean - 1.5*spread_std, color='green', linestyle='--', label='-1.5 STD')
+    plt.legend()
+    plt.title('Trading Signals Based on Spread')
+    plt.show()
+
 
 coint_test(tickers)
