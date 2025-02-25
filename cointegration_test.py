@@ -8,12 +8,14 @@ import matplotlib.pyplot as plt
 
 tickers = ['SHEL', 'CVX']
 
-def coint_test(tickers):
+#Download historical prices
 
-    def download_data(tickers, start = '2015-01-01', end = '2025-01-01'):
-        data = yf.download(tickers=tickers, start= start, end= end)['Close']
-        data = data.dropna()
-        return data
+def download_data(tickers, start = '2015-01-01', end = '2025-01-01'):
+    data = yf.download(tickers=tickers, start= start, end= end)['Close']
+    data = data.dropna()
+    return data
+
+def coint_test(tickers):
 
     data = download_data(tickers)
 
