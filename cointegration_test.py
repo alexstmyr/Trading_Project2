@@ -27,29 +27,30 @@ def coint_test(tickers):
     # ADF Test on individual assets
     adf_results = {ticker: adf_test(data[ticker], ticker) for ticker in tickers}
     
-    # OLS Regression to get hedge ratio
-    X = sm.add_constant(data[tickers[0]])  # Independent variable
-    y = data[tickers[1]]  # Dependent variable
+    # OLS Regression to get hedge ratio:
+    X = sm.add_constant(data[tickers[1]])  # Independent variable
+    y = data[tickers[0]]  # Dependent variable
     model = sm.OLS(y, X).fit()
-    hedge_ratio = model.params[tickers[0]]  # Hedge ratio from regression
+    hedge_ratio = model.params[tickers[1]]  # Hedge ratio from regression
 
-    # Compute residual spread
+    ols_summary = model.summary().as_text()
+
+    # Compute residual spread (Engle-Granger)
     spread = model.resid
-
-    # ADF Test on Residuals (Engle-Granger)
     spread_adf_result = adf_test(spread, 'Spread')
     
-    # Engle-Granger Cointegration Test
-    score, pvalue, _ = coint(data[tickers[0]], data[tickers[1]])
+    # Engle-Granger Cointegration Test (using the same ordering)
+    score, pvalue, _ = coint(data[tickers[1]], data[tickers[0]])
     
     # Johansen Cointegration Test
-    johansen_result = coint_johansen(data[[tickers[0], tickers[1]]], det_order=0, k_ar_diff=1)
+    johansen_result = coint_johansen(data[[tickers[1], tickers[0]]], det_order=0, k_ar_diff=1)
     beta_x = johansen_result.evec[0, 0]
     beta_y = johansen_result.evec[1, 0]
 
     return {
         "adf_results": adf_results,
         "spread_adf": spread_adf_result,
+        "ols_summary": ols_summary,
         "coint_test": {"Test Statistic": score, "p-value": pvalue},
         "johansen_beta": (beta_x, beta_y),
         "hedge_ratio": hedge_ratio,
