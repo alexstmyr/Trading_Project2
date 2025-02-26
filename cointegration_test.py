@@ -28,10 +28,10 @@ def coint_test(tickers):
     adf_results = {ticker: adf_test(data[ticker], ticker) for ticker in tickers}
     
     # OLS Regression to get hedge ratio
-    X = sm.add_constant(data[tickers[1]])  # Independent variable
-    y = data[tickers[0]]  # Dependent variable
+    X = sm.add_constant(data[tickers[0]])  # Independent variable
+    y = data[tickers[1]]  # Dependent variable
     model = sm.OLS(y, X).fit()
-    hedge_ratio = model.params[tickers[1]]  # Hedge ratio from regression
+    hedge_ratio = model.params[tickers[0]]  # Hedge ratio from regression
 
     # Compute residual spread
     spread = model.resid
@@ -43,7 +43,7 @@ def coint_test(tickers):
     score, pvalue, _ = coint(data[tickers[0]], data[tickers[1]])
     
     # Johansen Cointegration Test
-    johansen_result = coint_johansen(data[[tickers[0], tickers[1]]], det_order=1, k_ar_diff=1)
+    johansen_result = coint_johansen(data[[tickers[0], tickers[1]]], det_order=0, k_ar_diff=1)
     beta_x = johansen_result.evec[0, 0]
     beta_y = johansen_result.evec[1, 0]
 
