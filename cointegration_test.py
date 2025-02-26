@@ -4,15 +4,14 @@ import numpy as np
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import adfuller, coint
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
-import matplotlib.pyplot as plt
 
 def download_data(tickers, start='2015-01-01', end='2025-01-01'):
-    """Downloads historical price data."""
+    """Downloads historical price data for the given tickers."""
     data = yf.download(tickers=tickers, start=start, end=end)['Close']
     return data.dropna()
 
 def adf_test(series, series_name):
-    """Performs the Augmented Dickey-Fuller test."""
+    """Performs the Augmented Dickey-Fuller test to check for stationarity."""
     result = adfuller(series)
     return {
         "Test Statistic": result[0],
@@ -22,14 +21,14 @@ def adf_test(series, series_name):
     }
 
 def coint_test(tickers):
-    """Performs cointegration tests on a pair of assets."""
+    """Performs cointegration tests on a pair of assets and calculates the spread."""
     data = download_data(tickers)
     
-    # Perform ADF test on individual assets
+    # ADF Test on individual assets
     adf_results = {ticker: adf_test(data[ticker], ticker) for ticker in tickers}
     
     # OLS Regression to get hedge ratio
-    X = sm.add_constant(data[tickers[1]])  # Independent variable (explanatory)
+    X = sm.add_constant(data[tickers[1]])  # Independent variable
     y = data[tickers[0]]  # Dependent variable
     model = sm.OLS(y, X).fit()
     hedge_ratio = model.params[tickers[1]]  # Hedge ratio from regression
@@ -45,13 +44,8 @@ def coint_test(tickers):
     
     # Johansen Cointegration Test
     johansen_result = coint_johansen(data[[tickers[0], tickers[1]]], det_order=1, k_ar_diff=1)
-    
-    # Extract the first eigenvector values directly (without normalization)
-    beta_x = johansen_result.evec[0, 0]  # Coefficient for first asset
-    beta_y = johansen_result.evec[1, 0]  # Coefficient for second asset
-
-    # Calculate spread using these coefficients
-    spread_vec = beta_x * data[tickers[0]] + beta_y * data[tickers[1]]
+    beta_x = johansen_result.evec[0, 0]
+    beta_y = johansen_result.evec[1, 0]
 
     return {
         "adf_results": adf_results,
@@ -59,5 +53,5 @@ def coint_test(tickers):
         "coint_test": {"Test Statistic": score, "p-value": pvalue},
         "johansen_beta": (beta_x, beta_y),
         "hedge_ratio": hedge_ratio,
-        "spread_vec": spread_vec
+        "data": data
     }
