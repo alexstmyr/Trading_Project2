@@ -5,9 +5,9 @@ class KalmanFilterReg:
         """Initializes the Kalman Filter for dynamic hedge ratio estimation."""
         self.x = np.array([1, 1.1])  # Initial hedge ratio
         self.A = np.eye(2)  # State transition matrix
-        self.Q = np.eye(2) * 10  # Process noise covariance
-        self.R = np.array([[0.1]])  # Measurement noise covariance
-        self.P = np.eye(2) * 10  # Error covariance
+        self.Q = np.eye(2) * 0.001  # Process noise covariance
+        self.R = np.array([[1000]])  # Measurement noise covariance
+        self.P = np.eye(2) * 1000  # Error covariance
 
     def predict(self):
         """Predicts the next hedge ratio."""
@@ -24,9 +24,11 @@ class KalmanFilterReg:
     def run_kalman_filter(self, x_series, y_series):
         """Applies the Kalman Filter to estimate the hedge ratio dynamically."""
         hedge_ratios = []
-        for x, y in zip(x_series, y_series):
+        for i in range(len(x_series)):
             self.predict()
-            self.update(x, y)
+            x_val = x_series[i]
+            y_val = y_series[i]
+            self.update(x_val, y_val)
             params = self.x
-            hedge_ratios.append(params[0] + params[1] * x)  # Store hedge ratio
+            hedge_ratios.append(params[1])
         return np.array(hedge_ratios)

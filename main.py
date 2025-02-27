@@ -5,7 +5,7 @@ import backtesting as bt
 import pandas as pd
 
 # Define parameters.
-tickers = ['AMD', 'QCOM']
+tickers = ['MSFT', 'AMD']
 initial_capital = 1_000_000   # Initial capital.
 n_shares = 200                # Number of shares per trade.
 commission = 0.125 / 100      # Commission per trade.
@@ -13,6 +13,11 @@ commission = 0.125 / 100      # Commission per trade.
 # Run cointegration test and get results.
 results = ct.coint_test(tickers)
 data = results["data"]
+
+# Normalize the prices
+norm_data = data.copy()
+for ticker in tickers:
+    norm_data[ticker] = data[ticker] / data[ticker].iloc[0]
 
 # Print ADF Test Results.
 print("\n=== ADF Test Results ===")
@@ -35,7 +40,7 @@ print(f"  p-value       : {results['coint_test']['p-value']:.4f}")
 
 # Apply Kalman Filter for Dynamic Hedge Ratio Estimation.
 kf_model = kf.KalmanFilterReg()
-hedge_ratios = kf_model.run_kalman_filter(data[tickers[1]], data[tickers[0]])
+hedge_ratios = kf_model.run_kalman_filter(norm_data[tickers[0]], norm_data[tickers[1]])
 
 # Create a DataFrame for the dynamic hedge ratios.
 hedge_ratios_df = pd.DataFrame({
@@ -44,11 +49,13 @@ hedge_ratios_df = pd.DataFrame({
 }).set_index("Date")
 
 print("\n=== Dynamic Hedge Ratios (First 10 Values) ===")
-print(hedge_ratios_df.head(10))
+print(hedge_ratios_df)
 
 # Compute spread using Johansen Cointegration.
 beta_x, beta_y = results["johansen_beta"]
-spread_vec = beta_x * data[tickers[1]] + beta_y * data[tickers[0]]
+print(results["johansen_beta"])
+print(f'Beta x {beta_x} beta y {beta_y}')
+spread_vec = (beta_x * data[tickers[1]] + beta_y * data[tickers[0]])
 
 # Generate Trading Signals based on the Johansen spread.
 signals_df, spread_mean, spread_std = sg.generate_signals(spread_vec)
