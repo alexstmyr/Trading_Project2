@@ -5,8 +5,7 @@ import backtesting as bt
 import pandas as pd
 
 # ----- PARAMETERS -----
-# We model: MSFT = const + β * AMD (i.e., dependent: MSFT, independent: AMD)
-tickers = ['MSFT', 'AMD']
+tickers = ['AMD', 'QCOM']
 initial_capital = 1_000_000   # Starting capital.
 n_shares = 200                # Number of shares per trade.
 commission = 0.125 / 100      # Commission per trade (0.125%).
@@ -42,19 +41,19 @@ print(f"Estimated Johansen beta vector: (beta_x: {beta_x:.4f}, beta_y: {beta_y:.
 
 # Apply Kalman Filter for dynamic hedge ratio estimation.
 kf_model = kf.KalmanFilterReg()
-dynamic_hedge_ratios = kf_model.run_kalman_filter(data[tickers[1]].values, data[tickers[0]].values)
+dynamic_hedge_ratios = kf_model.run_kalman_filter(data[tickers[0]].values, data[tickers[1]].values)
 
 # Compute dynamic spread using the dynamic hedge ratio.
 # dynamic_spread = MSFT - (dynamic β)*AMD.
 dynamic_spread = beta_x * data[tickers[0]] + beta_y * data[tickers[1]]
 
-# (Optional) Save dynamic hedge ratios for reference.
+# Save dynamic hedge ratios for reference.
 hedge_ratios_df = pd.DataFrame({
     "Date": data.index,
     "Dynamic Hedge Ratio": dynamic_hedge_ratios
 }).set_index("Date")
 print("\n=== Dynamic Hedge Ratios (First 10 Values) ===")
-print(hedge_ratios_df.head(10))
+print(hedge_ratios_df)
 
 # ----- GROUP 2: SIGNALS & BACKTESTING -----
 # Generate trading signals based on the dynamic spread.

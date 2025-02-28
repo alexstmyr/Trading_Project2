@@ -38,7 +38,7 @@ def run_backtest(data, signals_df, initial_capital, n_shares, commission, margin
     trade_log = []  # To record details of each closed trade.
     active_trades = []  # List of currently open trades.
     
-    # Assume data.columns[0] is the dependent asset (e.g., MSFT) and data.columns[1] is the independent asset (e.g., AMD).
+    # Assume data.columns[0] is the dependent asset  and data.columns[1] is the independent asset.
     dep_asset = data.columns[0]
     ind_asset = data.columns[1]
     
