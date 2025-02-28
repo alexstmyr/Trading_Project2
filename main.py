@@ -59,6 +59,9 @@ print(hedge_ratios_df)
 # Generate trading signals based on the dynamic spread.
 signals_df, spread_mean, spread_std = sg.generate_signals(dynamic_spread)
 
+#Add dynamic hedge-ratio to the signals data frame
+signals_df["Dynamic Hedge Ratio"] = pd.Series(dynamic_hedge_ratios, index=data.index)
+
 # Run backtesting.
 portfolio_df, init_val, final_val, total_trades, win_rate, trades_df = bt.run_backtest(
     data, signals_df, initial_capital, n_shares, commission
