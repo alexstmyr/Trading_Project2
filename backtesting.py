@@ -1,119 +1,103 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def run_backtest(data, signals_df, initial_capital, n_shares, commission, close_threshold=0.2):
-
+def run_backtest(data, signals_df, initial_capital, n_shares, commission, margin_cap=250000):
+    """
+    Runs a backtest of the pair trading strategy.
+    
+    Strategy rules:
+      - Open a trade when the signal transitions from 0 to ±1.
+      - For a long trade (signal = 1): Buy dependent asset, short independent asset.
+      - For a short trade (signal = -1): Short dependent asset, buy independent asset.
+      - Close all open trades when the signal returns to 0 (i.e. when the normalized spread crosses 0).
+      - Multiple trades may be open concurrently.
+    
+    Commission is applied on both entry and exit.
+    A margin cap ensures that the remaining capital is above a specified threshold.
+    
+    Returns:
+      - portfolio_df: A DataFrame of portfolio value over time.
+      - initial_capital: The starting capital.
+      - final_capital: The ending portfolio value.
+      - total_trades: Total number of trades executed.
+      - win_rate: Percentage of trades with net profit > 0.
+    
+    Also plots the portfolio value over time.
+    """
     capital = initial_capital
-    active_long_positions = []   # List of long positions: each is a dict with keys: 'date', 'price1', 'price2', 'hedge_ratio'
-    active_short_positions = []  # List of short positions.
-    portfolio_value = []
-    trades_count = 0
-    trades_profit = []
-
+    portfolio_values = []
+    trade_log = []      # Records each closed trade.
+    active_trades = []  # List of open trades.
+    
+    sig_series = signals_df['Signal']
+    prev_signal = 0
+    
     for timestamp, row in data.iterrows():
-        # Retrieve signal and normalized spread from signals_df.
-        if timestamp in signals_df.index:
-            signal = signals_df.loc[timestamp, "Signal_Asset1"]
-            norm_spread = signals_df.loc[timestamp, "Normalized Spread"]
-            current_hr = signals_df.loc[timestamp, "Dynamic Hedge Ratio"] if "Dynamic Hedge Ratio" in signals_df.columns else 1
-        else:
-            signal = 0
-            norm_spread = None
-            current_hr = 1
-
-        # Force exit if normalized spread is near zero.
-        if norm_spread is not None and abs(norm_spread) < close_threshold:
-            signal = 0
-
-        # Extract prices:
-        price1 = row[data.columns[0]]  # Dependent asset (e.g. MSFT)
-        price2 = row[data.columns[1]]  # Independent asset (e.g. AMD)
-
-        # -- Close positions if signal is 0 (exit) --
-        # Close long positions if there are any and signal is not 1.
-        if active_long_positions and signal != 1:
-            for pos in active_long_positions:
-                # Use the recorded hedge ratio at entry for Asset2 quantity.
-                qty1 = n_shares
-                qty2 = n_shares * pos['hedge_ratio']
-                profit_asset1 = (price1 - pos['price1']) * qty1
-                profit_asset2 = (pos['price2'] - price2) * qty2
-                trade_profit = profit_asset1 + profit_asset2
-                closing_cost = ((price1 * qty1) + (price2 * qty2)) * commission
-                capital += trade_profit - closing_cost
-                trades_profit.append(trade_profit - closing_cost)
-                trades_count += 1
-            active_long_positions = []
-
-        # Close short positions if there are any and signal is not -1.
-        if active_short_positions and signal != -1:
-            for pos in active_short_positions:
-                qty1 = n_shares
-                qty2 = n_shares * pos['hedge_ratio']
-                profit_asset1 = (pos['price1'] - price1) * qty1
-                profit_asset2 = (price2 - pos['price2']) * qty2
-                trade_profit = profit_asset1 + profit_asset2
-                closing_cost = ((price1 * qty1) + (price2 * qty2)) * commission
-                capital += trade_profit - closing_cost
-                trades_profit.append(trade_profit - closing_cost)
-                trades_count += 1
-            active_short_positions = []
-
-        # -- Open positions based on signal --
-        # For a long signal (signal == 1): Buy dependent asset, short independent asset.
-        if signal == 1 and not active_long_positions:
-            qty1 = n_shares
-            qty2 = n_shares * current_hr
-            cost_asset1 = price1 * qty1 * (1 + commission)
-            cost_asset2 = price2 * qty2 * commission  # commission cost on shorting asset2
-            total_cost = cost_asset1 + cost_asset2
-            if capital > total_cost and capital > 250_000:
-                capital -= total_cost
-                active_long_positions.append({
-                    'date': timestamp,
-                    'price1': price1,
-                    'price2': price2,
-                    'hedge_ratio': current_hr
-                })
-        # For a short signal (signal == -1): Sell dependent asset, buy independent asset.
-        if signal == -1 and not active_short_positions:
-            qty1 = n_shares
-            qty2 = n_shares * current_hr
-            cost_asset1 = price1 * qty1 * commission  # commission cost when shorting asset1
-            cost_asset2 = price2 * qty2 * (1 + commission)  # cost to buy asset2
-            total_cost = cost_asset1 + cost_asset2
-            if capital > total_cost and capital > 250_000:
-                capital -= total_cost
-                active_short_positions.append({
-                    'date': timestamp,
-                    'price1': price1,
-                    'price2': price2,
-                    'hedge_ratio': current_hr
-                })
-
-        # Calculate unrealized P&L for active positions.
-        long_pnl = 0
-        for pos in active_long_positions:
-            qty1 = n_shares
-            qty2 = n_shares * pos['hedge_ratio']
-            long_pnl += (price1 - pos['price1']) * qty1 + (pos['price2'] - price2) * qty2
-        short_pnl = 0
-        for pos in active_short_positions:
-            qty1 = n_shares
-            qty2 = n_shares * pos['hedge_ratio']
-            short_pnl += (pos['price1'] - price1) * qty1 + (price2 - pos['price2']) * qty2
-
-        total_value = capital + long_pnl + short_pnl
-        portfolio_value.append(total_value)
-
-    portfolio_df = pd.DataFrame({
-        'Portfolio Value': portfolio_value
-    }, index=data.index)
-
-    final_value = portfolio_value[-1]
-    win_rate = (sum([1 for p in trades_profit if p > 0]) / trades_count * 100) if trades_count > 0 else 0
-
+        current_signal = sig_series.loc[timestamp] if timestamp in sig_series.index else 0
+        price1 = row[data.columns[0]]  # Dependent asset (e.g., MSFT)
+        price2 = row[data.columns[1]]  # Independent asset (e.g., AMD)
+        
+        # --- Trade Entry ---
+        # If signal transitions from 0 to nonzero, open a new trade.
+        if prev_signal == 0 and current_signal != 0:
+            # Determine trade cost:
+            if current_signal == 1:
+                # Long trade: Buy asset1 (price1) and short asset2 (price2).
+                cost = price1 * n_shares * (1 + commission) + price2 * n_shares * commission
+            elif current_signal == -1:
+                # Short trade: Short asset1 and buy asset2.
+                cost = price1 * n_shares * commission + price2 * n_shares * (1 + commission)
+            if capital > cost and capital > margin_cap:
+                # Record trade details.
+                trade = {
+                    'entry_time': timestamp,
+                    'entry_price1': price1,
+                    'entry_price2': price2,
+                    'direction': current_signal  # 1 for long, -1 for short.
+                }
+                active_trades.append(trade)
+                capital -= cost  # Deduct entry cost.
+        
+        # --- Trade Exit ---
+        # If signal transitions from nonzero to 0, close all open trades.
+        if prev_signal != 0 and current_signal == 0 and active_trades:
+            for trade in active_trades:
+                if trade['direction'] == 1:
+                    # Long trade: profit = (current price1 - entry_price1) * n_shares 
+                    #              + (entry_price2 - current price2) * n_shares.
+                    profit = (price1 - trade['entry_price1']) * n_shares + (trade['entry_price2'] - price2) * n_shares
+                    exit_cost = (price1 * n_shares + price2 * n_shares) * commission
+                else:
+                    # Short trade: profit = (entry_price1 - current price1) * n_shares 
+                    #              + (current price2 - entry_price2) * n_shares.
+                    profit = (trade['entry_price1'] - price1) * n_shares + (price2 - trade['entry_price2']) * n_shares
+                    exit_cost = (price1 * n_shares + price2 * n_shares) * commission
+                net_profit = profit - exit_cost
+                capital += net_profit
+                trade['exit_time'] = timestamp
+                trade['profit'] = net_profit
+                trade_log.append(trade)
+            active_trades = []
+        
+        # --- Update Portfolio Value ---
+        # For any open trades, calculate unrealized P&L.
+        unrealized = 0
+        for trade in active_trades:
+            if trade['direction'] == 1:
+                pnl = (price1 - trade['entry_price1']) * n_shares + (trade['entry_price2'] - price2) * n_shares
+            else:
+                pnl = (trade['entry_price1'] - price1) * n_shares + (price2 - trade['entry_price2']) * n_shares
+            unrealized += pnl
+        portfolio_values.append(capital + unrealized)
+        prev_signal = current_signal
+    
+    portfolio_df = pd.DataFrame({'Portfolio Value': portfolio_values}, index=data.index)
+    final_capital = portfolio_values[-1]
+    total_trades = len(trade_log)
+    win_rate = (sum(1 for t in trade_log if t['profit'] > 0) / total_trades * 100) if total_trades > 0 else 0
+    
+    # Plot portfolio value over time.
     portfolio_df.plot(title="Portfolio Value Over Time")
     plt.show()
-
-    return portfolio_df, initial_capital, final_value, trades_count, win_rate
+    
+    return portfolio_df, initial_capital, final_capital, total_trades, win_rate

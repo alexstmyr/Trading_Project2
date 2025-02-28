@@ -2,92 +2,112 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-def generate_signals_with_indices(spread_vec):
-    spread_mean = spread_vec.mean()
-    spread_std = spread_vec.std()
-    normalized_spread = (spread_vec - spread_mean) / spread_std
-
-    n = len(normalized_spread)
-    signals = np.zeros(n, dtype=int)
-    long_signals = []
-    short_signals = []
-    close_signals = []
-    position = None
-
-    # Use .iloc for positional indexing.
-    for i in range(n):
-        value = normalized_spread.iloc[i]
-        if position is None:
-            if value < -1.5:
-                signals[i] = 1
-                long_signals.append(i)
-                position = 'long'
-            elif value > 1.5:
-                signals[i] = -1
-                short_signals.append(i)
-                position = 'short'
-        else:
-            if position == 'long' and value >= 0:
-                signals[i] = 0
-                close_signals.append(i)
-                position = None
-            elif position == 'short' and value <= 0:
-                signals[i] = 0
-                close_signals.append(i)
-                position = None
-
-    signals_opp = -signals
+def generate_signals(spread_vec):
+    """
+    Generates trading signals based on the normalized dynamic spread.
+    Mean-reversion assumption:
+      - If normalized spread < -1.5 => signal = +1 (Buy MSFT, Sell AMD)
+      - If normalized spread > +1.5  => signal = -1 (Sell MSFT, Buy AMD)
+      - Else => signal = 0
+    """
+    mean_ = spread_vec.mean()
+    std_ = spread_vec.std()
+    normalized_spread = (spread_vec - mean_) / std_
+    
+    signals = np.zeros(len(normalized_spread), dtype=int)
+    signals[normalized_spread < -1.5] = 1
+    signals[normalized_spread >  1.5] = -1
+    
     signals_df = pd.DataFrame({
         'Normalized Spread': normalized_spread,
-        'Signal_Asset1': signals,
-        'Signal_Asset2': signals_opp
+        'Signal': signals
     }, index=spread_vec.index)
+    
+    return signals_df, mean_, std_
 
-    return signals_df, long_signals, short_signals, close_signals, spread_mean, spread_std
+def plot_strategy(data, tickers, spread_vec, signals_df):
+    """
+    Plots:
+      1) Upper panel: MSFT & AMD prices with signals
+         - Buy MSFT / Sell AMD markers on each asset
+         - Sell MSFT / Buy AMD markers on each asset
+      2) Lower panel: Normalized spread with lines at ±1.5σ and 0
 
-def plot_combined_chart(data, tickers, spread_vec, signals_df):
+    Ensures only ONE legend label for each buy/sell action.
     """
-    Plots asset prices with buy/sell signals and the normalized spread.
+    fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True,
+                             gridspec_kw={'height_ratios': [2, 1]})
     
-    - Upper panel: plots the price series for tickers[0] (left axis) and tickers[1] (right axis).
-    - Lower panel: plots the normalized spread along with threshold lines.
-    """
-    fig, ax1 = plt.subplots(2, 1, figsize=(14, 8), sharex=True,
-                              gridspec_kw={'height_ratios': [2, 1]})
+    ax_msft = axes[0]
+    ax_amd = ax_msft.twinx()
     
-    # Upper panel: plot asset prices.
-    ax1[0].plot(data.index, data[tickers[0]], label=tickers[0], color='blue')
-    ax1[0].set_ylabel(f'{tickers[0]} Price', color='blue')
-    ax2 = ax1[0].twinx()
-    ax2.plot(data.index, data[tickers[1]], label=tickers[1], color='orange')
-    ax2.set_ylabel(f'{tickers[1]} Price', color='orange')
+    # Plot the two assets
+    ax_msft.plot(data.index, data[tickers[0]], color='blue', label=tickers[0])
+    ax_msft.set_ylabel(f'{tickers[0]} Price', color='blue')
     
-    # Extract signals.
-    buy_asset1 = signals_df[signals_df["Signal_Asset1"] == 1]
-    sell_asset1 = signals_df[signals_df["Signal_Asset1"] == -1]
-    buy_asset2 = signals_df[signals_df["Signal_Asset2"] == 1]
-    sell_asset2 = signals_df[signals_df["Signal_Asset2"] == -1]
+    ax_amd.plot(data.index, data[tickers[1]], color='orange', label=tickers[1])
+    ax_amd.set_ylabel(f'{tickers[1]} Price', color='orange')
     
-    ax1[0].scatter(buy_asset1.index, data.loc[buy_asset1.index, tickers[0]], 
-                   marker='^', color='green', s=100, label='Buy ' + tickers[0])
-    ax1[0].scatter(sell_asset1.index, data.loc[sell_asset1.index, tickers[0]], 
-                   marker='v', color='red', s=100, label='Sell ' + tickers[0])
-    ax2.scatter(buy_asset2.index, data.loc[buy_asset2.index, tickers[1]], 
-                   marker='^', color='purple', s=100, label='Buy ' + tickers[1])
-    ax2.scatter(sell_asset2.index, data.loc[sell_asset2.index, tickers[1]], 
-                   marker='v', color='orange', s=100, label='Sell ' + tickers[1])
+    # Identify buy/sell signals
+    sig = signals_df['Signal']
+    buy_signals_index = sig[sig == 1].index
+    sell_signals_index = sig[sig == -1].index
+
+    # We'll do each label once:
+    buy_msft_label_used = False
+    sell_amd_label_used = False
+    sell_msft_label_used = False
+    buy_amd_label_used = False
+
+    # Signal = +1 => Buy MSFT, Sell AMD
+    for idx in buy_signals_index:
+        msft_price = data.loc[idx, tickers[0]]
+        amd_price  = data.loc[idx, tickers[1]]
+        
+        if not buy_msft_label_used:
+            ax_msft.scatter(idx, msft_price, marker='^', color='green', s=100, label='Buy ' + tickers[0])
+            buy_msft_label_used = True
+        else:
+            ax_msft.scatter(idx, msft_price, marker='^', color='green', s=100)
+        
+        if not sell_amd_label_used:
+            ax_amd.scatter(idx, amd_price, marker='v', color='red', s=100, label='Sell ' + tickers[1])
+            sell_amd_label_used = True
+        else:
+            ax_amd.scatter(idx, amd_price, marker='v', color='red', s=100)
     
-    # Lower panel: plot normalized spread.
-    # Here, we assume spread_vec is the raw spread; we normalize it for plotting.
-    norm_mean = spread_vec.mean()
-    norm_std = spread_vec.std()
-    normalized_spread = (spread_vec - norm_mean) / norm_std
-    ax1[1].plot(signals_df.index, normalized_spread, color='blue', label='Normalized Spread')
-    ax1[1].axhline(1.5, color='orange', linestyle='--', label='+1.5σ')
-    ax1[1].axhline(-1.5, color='red', linestyle='--', label='-1.5σ')
-    ax1[1].set_ylabel('Normalized Spread')
+    # Signal = -1 => Sell MSFT, Buy AMD
+    for idx in sell_signals_index:
+        msft_price = data.loc[idx, tickers[0]]
+        amd_price  = data.loc[idx, tickers[1]]
+        
+        if not sell_msft_label_used:
+            ax_msft.scatter(idx, msft_price, marker='v', color='red', s=100, label='Sell ' + tickers[0])
+            sell_msft_label_used = True
+        else:
+            ax_msft.scatter(idx, msft_price, marker='v', color='red', s=100)
+        
+        if not buy_amd_label_used:
+            ax_amd.scatter(idx, amd_price, marker='^', color='green', s=100, label='Buy ' + tickers[1])
+            buy_amd_label_used = True
+        else:
+            ax_amd.scatter(idx, amd_price, marker='^', color='green', s=100)
     
-    plt.legend()
+    # Combine legends
+    lines1, labels1 = ax_msft.get_legend_handles_labels()
+    lines2, labels2 = ax_amd.get_legend_handles_labels()
+    ax_msft.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    
+    # Lower panel: Normalized spread
+    ax_spread = axes[1]
+    mean_ = spread_vec.mean()
+    std_  = spread_vec.std()
+    norm_spread = (spread_vec - mean_) / std_
+    
+    ax_spread.plot(norm_spread.index, norm_spread, color='blue', label='Normalized Spread')
+    ax_spread.axhline(1.5, color='orange', linestyle='--', label='+1.5σ')
+    ax_spread.axhline(-1.5, color='orange', linestyle='--')
+    ax_spread.axhline(0, color='black', linestyle='-', label='0')
+    ax_spread.legend(loc='upper left')
+    
     plt.show()
-
-
