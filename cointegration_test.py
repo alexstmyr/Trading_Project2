@@ -31,19 +31,20 @@ def coint_test(tickers):
     X = sm.add_constant(data[tickers[1]])  # Independent variable
     y = data[tickers[0]]  # Dependent variable
     model = sm.OLS(y, X).fit()
-    hedge_ratio = model.params[tickers[1]]  # Hedge ratio from regression
+    beta = model.params[tickers[1]]
 
     ols_summary = model.summary().as_text()
 
     # Compute residual spread (Engle-Granger)
-    spread = model.resid
+    spread = data[tickers[1]] - beta * data[tickers[0]]
     spread_adf_result = adf_test(spread, 'Spread')
     
     # Engle-Granger Cointegration Test (using the same ordering)
     score, pvalue, _ = coint(data[tickers[1]], data[tickers[0]])
     
     # Johansen Cointegration Test
-    johansen_result = coint_johansen(data[[tickers[1], tickers[0]]], det_order=0, k_ar_diff=1)
+    johansen_data = data.diff().dropna().values
+    johansen_result = coint_johansen(johansen_data, det_order=0, k_ar_diff=1)
     beta_x = johansen_result.evec[0, 0]
     beta_y = johansen_result.evec[1, 0]
 
@@ -52,7 +53,8 @@ def coint_test(tickers):
         "spread_adf": spread_adf_result,
         "ols_summary": ols_summary,
         "coint_test": {"Test Statistic": score, "p-value": pvalue},
+        "johansen_results": johansen_result,
         "johansen_beta": (beta_x, beta_y),
-        "hedge_ratio": hedge_ratio,
+        "beta": beta,
         "data": data
     }
