@@ -62,9 +62,6 @@ print("\n=== Dynamic Hedge Ratios (First 10 Values) ===")
 print(hedge_ratios_df)
 
 # --- SIGNAL GENERATION ---
-# Generate signals using the dynamic spread.
-# (generate_signals_with_indices returns a DataFrame with columns:
-# 'Normalized Spread', 'Signal_Asset1', 'Signal_Asset2')
 signals_df, long_signals, short_signals, close_signals, spread_mean, spread_std = sg.generate_signals_with_indices(dynamic_spread)
 
 # --- BACKTESTING ---
