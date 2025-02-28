@@ -7,7 +7,7 @@ import pandas as pd
 # ----- PARAMETERS -----
 tickers = ['AMD', 'QCOM']
 initial_capital = 1_000_000   # Starting capital.
-n_shares = 200                # Number of shares per trade.
+n_shares = 1000                # Number of shares per trade.
 commission = 0.125 / 100      # Commission per trade (0.125%).
 
 # ----- GROUP 1: COINTEGRATION & DYNAMIC HEDGE RATIO -----
