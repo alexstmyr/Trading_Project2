@@ -7,7 +7,7 @@ import pandas as pd
 
 # Define parameters.
 # We model: MSFT = const + β * AMD.
-tickers = ['MSFT', 'AMD']
+tickers = ['AMD', 'QCOM']
 initial_capital = 1_000_000   # Initial capital.
 n_shares = 200                # Number of shares per trade.
 commission = 0.125 / 100      # Commission per trade.

@@ -3,20 +3,6 @@ import numpy as np
 import pandas as pd
 
 def generate_signals_with_indices(spread_vec):
-    """
-    Generates trading signals based on the normalized spread thresholds.
-    Uses a stateful loop to mark the first crossing (entry) and then the exit when the normalized
-    spread returns to 0.
-    
-    Returns:
-      - signals_df: a DataFrame with the normalized spread, and signal columns:
-          'Signal_Asset1' (for dependent asset) and 'Signal_Asset2' (for independent asset).
-      - long_signals: list of index positions for long entry.
-      - short_signals: list of index positions for short entry.
-      - close_signals: list of index positions for exit.
-      - mean_spread: mean of the raw spread.
-      - std_spread: standard deviation of the raw spread.
-    """
     spread_mean = spread_vec.mean()
     spread_std = spread_vec.std()
     normalized_spread = (spread_vec - spread_mean) / spread_std
