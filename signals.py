@@ -5,10 +5,15 @@ import pandas as pd
 def generate_signals(spread_vec):
     """
     Generates trading signals based on the normalized dynamic spread.
-    Mean-reversion assumption:
-      - If normalized spread < -1.5 => signal = +1 (Buy MSFT, Sell AMD)
-      - If normalized spread > +1.5  => signal = -1 (Sell MSFT, Buy AMD)
-      - Else => signal = 0
+    
+    Trading rules:
+      - If normalized spread < -1.5, set Signal = +1 (i.e., Buy MSFT, Sell AMD).
+      - If normalized spread >  1.5, set Signal = -1 (i.e., Sell MSFT, Buy AMD).
+      - Otherwise, Signal = 0 (no position).
+    
+    Returns:
+      - signals_df: DataFrame with 'Normalized Spread' and 'Signal' columns.
+      - spread_mean and spread_std.
     """
     mean_ = spread_vec.mean()
     std_ = spread_vec.std()
@@ -16,7 +21,7 @@ def generate_signals(spread_vec):
     
     signals = np.zeros(len(normalized_spread), dtype=int)
     signals[normalized_spread < -1.5] = 1
-    signals[normalized_spread >  1.5] = -1
+    signals[normalized_spread > 1.5] = -1
     
     signals_df = pd.DataFrame({
         'Normalized Spread': normalized_spread,
@@ -27,87 +32,76 @@ def generate_signals(spread_vec):
 
 def plot_strategy(data, tickers, spread_vec, signals_df):
     """
-    Plots:
-      1) Upper panel: MSFT & AMD prices with signals
-         - Buy MSFT / Sell AMD markers on each asset
-         - Sell MSFT / Buy AMD markers on each asset
-      2) Lower panel: Normalized spread with lines at ±1.5σ and 0
-
-    Ensures only ONE legend label for each buy/sell action.
+    Plots the trading strategy chart.
+    
+    Upper panel: Price series for both assets with trade markers.
+      - For Signal = +1: Plot Buy marker on dependent asset (MSFT) and Sell marker on independent asset (AMD).
+      - For Signal = -1: Plot Sell marker on dependent asset and Buy marker on independent asset.
+    Lower panel: Plot the normalized dynamic spread with horizontal lines at +1.5, -1.5, and 0.
+    The legend is created only once per marker.
     """
     fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True,
                              gridspec_kw={'height_ratios': [2, 1]})
     
-    ax_msft = axes[0]
-    ax_amd = ax_msft.twinx()
+    # Create axes for prices:
+    ax_dep = axes[0]
+    ax_ind = ax_dep.twinx()
+    dep_asset = tickers[0]
+    ind_asset = tickers[1]
     
-    # Plot the two assets
-    ax_msft.plot(data.index, data[tickers[0]], color='blue', label=tickers[0])
-    ax_msft.set_ylabel(f'{tickers[0]} Price', color='blue')
+    ax_dep.plot(data.index, data[dep_asset], color='blue', label=dep_asset)
+    ax_dep.set_ylabel(f"{dep_asset} Price", color='blue')
+    ax_ind.plot(data.index, data[ind_asset], color='orange', label=ind_asset)
+    ax_ind.set_ylabel(f"{ind_asset} Price", color='orange')
     
-    ax_amd.plot(data.index, data[tickers[1]], color='orange', label=tickers[1])
-    ax_amd.set_ylabel(f'{tickers[1]} Price', color='orange')
-    
-    # Identify buy/sell signals
+    # Get signals.
     sig = signals_df['Signal']
-    buy_signals_index = sig[sig == 1].index
-    sell_signals_index = sig[sig == -1].index
-
-    # We'll do each label once:
-    buy_msft_label_used = False
-    sell_amd_label_used = False
-    sell_msft_label_used = False
-    buy_amd_label_used = False
-
-    # Signal = +1 => Buy MSFT, Sell AMD
-    for idx in buy_signals_index:
-        msft_price = data.loc[idx, tickers[0]]
-        amd_price  = data.loc[idx, tickers[1]]
-        
-        if not buy_msft_label_used:
-            ax_msft.scatter(idx, msft_price, marker='^', color='green', s=100, label='Buy ' + tickers[0])
-            buy_msft_label_used = True
-        else:
-            ax_msft.scatter(idx, msft_price, marker='^', color='green', s=100)
-        
-        if not sell_amd_label_used:
-            ax_amd.scatter(idx, amd_price, marker='v', color='red', s=100, label='Sell ' + tickers[1])
-            sell_amd_label_used = True
-        else:
-            ax_amd.scatter(idx, amd_price, marker='v', color='red', s=100)
+    buy_signals = sig[sig == 1].index
+    sell_signals = sig[sig == -1].index
     
-    # Signal = -1 => Sell MSFT, Buy AMD
-    for idx in sell_signals_index:
-        msft_price = data.loc[idx, tickers[0]]
-        amd_price  = data.loc[idx, tickers[1]]
-        
-        if not sell_msft_label_used:
-            ax_msft.scatter(idx, msft_price, marker='v', color='red', s=100, label='Sell ' + tickers[0])
-            sell_msft_label_used = True
-        else:
-            ax_msft.scatter(idx, msft_price, marker='v', color='red', s=100)
-        
-        if not buy_amd_label_used:
-            ax_amd.scatter(idx, amd_price, marker='^', color='green', s=100, label='Buy ' + tickers[1])
-            buy_amd_label_used = True
-        else:
-            ax_amd.scatter(idx, amd_price, marker='^', color='green', s=100)
+    # Plot markers with one legend entry per type.
+    dep_buy_plotted = False
+    ind_sell_plotted = False
+    dep_sell_plotted = False
+    ind_buy_plotted = False
     
-    # Combine legends
-    lines1, labels1 = ax_msft.get_legend_handles_labels()
-    lines2, labels2 = ax_amd.get_legend_handles_labels()
-    ax_msft.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    for ts in buy_signals:
+        if not dep_buy_plotted:
+            ax_dep.scatter(ts, data.loc[ts, dep_asset], marker='^', color='green', s=100, label=f"Buy {dep_asset}")
+            dep_buy_plotted = True
+        else:
+            ax_dep.scatter(ts, data.loc[ts, dep_asset], marker='^', color='green', s=100)
+        if not ind_sell_plotted:
+            ax_ind.scatter(ts, data.loc[ts, ind_asset], marker='v', color='red', s=100, label=f"Sell {ind_asset}")
+            ind_sell_plotted = True
+        else:
+            ax_ind.scatter(ts, data.loc[ts, ind_asset], marker='v', color='red', s=100)
     
-    # Lower panel: Normalized spread
+    for ts in sell_signals:
+        if not dep_sell_plotted:
+            ax_dep.scatter(ts, data.loc[ts, dep_asset], marker='v', color='red', s=100, label=f"Sell {dep_asset}")
+            dep_sell_plotted = True
+        else:
+            ax_dep.scatter(ts, data.loc[ts, dep_asset], marker='v', color='red', s=100)
+        if not ind_buy_plotted:
+            ax_ind.scatter(ts, data.loc[ts, ind_asset], marker='^', color='green', s=100, label=f"Buy {ind_asset}")
+            ind_buy_plotted = True
+        else:
+            ax_ind.scatter(ts, data.loc[ts, ind_asset], marker='^', color='green', s=100)
+    
+    # Combine legends.
+    lines1, labels1 = ax_dep.get_legend_handles_labels()
+    lines2, labels2 = ax_ind.get_legend_handles_labels()
+    ax_dep.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    
+    # Lower panel: plot normalized spread.
     ax_spread = axes[1]
-    mean_ = spread_vec.mean()
-    std_  = spread_vec.std()
-    norm_spread = (spread_vec - mean_) / std_
-    
+    norm_spread = signals_df['Normalized Spread']
     ax_spread.plot(norm_spread.index, norm_spread, color='blue', label='Normalized Spread')
     ax_spread.axhline(1.5, color='orange', linestyle='--', label='+1.5σ')
-    ax_spread.axhline(-1.5, color='orange', linestyle='--')
+    ax_spread.axhline(-1.5, color='orange', linestyle='--', label='-1.5σ')
     ax_spread.axhline(0, color='black', linestyle='-', label='0')
+    ax_spread.set_ylabel('Normalized Spread')
     ax_spread.legend(loc='upper left')
     
     plt.show()
