@@ -8,15 +8,7 @@ def run_backtest(data, signals_df, initial_capital, n_shares, commission, margin
     Trading rules:
       - When the signal transitions from 0 to +1: Open a LONG trade (Buy dependent asset, short independent asset).
       - When the signal transitions from 0 to -1: Open a SHORT trade (Short dependent asset, buy independent asset).
-      - When the signal transitions from ±1 to 0, close all open trades.
-      - Multiple trades may be open concurrently.
-
-    For LONG trades:
-      - Entry cost = (dep_price * n_shares * (1+commission)) + (ind_price * (n_shares * hedge_ratio) * commission).
-      - Exit proceeds = (dep_exit * n_shares * (1-commission)) + (ind_exit * (n_shares * hedge_ratio) * (1-commission)).
-    For SHORT trades:
-      - Entry cost = (dep_price * n_shares * commission) + (ind_price * (n_shares * hedge_ratio) * (1+commission)).
-      - Exit proceeds = (dep_exit * n_shares * (1-commission)) + (ind_exit * (n_shares * hedge_ratio) * (1-commission)).
+      - When the signal transitions from ±1 to 0 (either a general exit or a close signal), close all open trades.
 
     Capital (cash) is reduced by the full entry cost at trade entry and increased by the exit proceeds when closing.
     The portfolio value is computed at each time as:
@@ -35,7 +27,6 @@ def run_backtest(data, signals_df, initial_capital, n_shares, commission, margin
     trade_log = []  # To record details of each closed trade.
     active_trades = []  # List of currently open trades.
 
-    # Assume data.columns[0] is the dependent asset  and data.columns[1] is the independent asset.
     dep_asset = data.columns[0]
     ind_asset = data.columns[1]
 
@@ -50,8 +41,8 @@ def run_backtest(data, signals_df, initial_capital, n_shares, commission, margin
         dep_price = row[dep_asset]
         ind_price = row[ind_asset]
 
-        # --- Trade Exit ---
-        if prev_signal != 0 and current_signal == 0 and active_trades:
+        # --- Trade Exit (Handling Close Signal) ---
+        if prev_signal != 0 and (current_signal == 0 or current_signal != prev_signal) and active_trades:
             for trade in active_trades:
                 dep_exit = dep_price
                 ind_exit = ind_price
@@ -60,21 +51,25 @@ def run_backtest(data, signals_df, initial_capital, n_shares, commission, margin
                 qty_dep = n_shares
                 qty_ind = n_shares * trade_hr  # Apply hedge ratio to the independent asset
 
-                # For LONG trades (signal +1).
-                if trade['direction'] == 1:
-                    exit_proceeds = (dep_exit * qty_dep * (1 - commission)) + (ind_exit * qty_ind * (1 - commission))
-                else:
-                    # For SHORT trades (signal -1).
-                    exit_proceeds = (dep_exit * qty_dep * (1 - commission)) + (ind_exit * qty_ind * (1 - commission))
+                # Separate handling of LONG and SHORT exits
+                if trade['direction'] == 1:  # Closing a LONG trade
+                    dep_exit_proceeds = dep_exit * qty_dep * (1 - commission)  # Sell dependent asset
+                    ind_exit_proceeds = ind_exit * qty_ind * (1 - commission)  # Buy back independent asset (Short Close)
+                else:  # Closing a SHORT trade
+                    dep_exit_proceeds = dep_exit * qty_dep * (1 - commission)  # Buy back dependent asset (Short Close)
+                    ind_exit_proceeds = ind_exit * qty_ind * (1 - commission)  # Sell independent asset
 
+                exit_proceeds = dep_exit_proceeds + ind_exit_proceeds
                 profit = exit_proceeds - trade['entry_cost']
                 capital += exit_proceeds
+
                 trade['exit_time'] = timestamp
                 trade[f"{dep_asset}_exit"] = dep_exit
                 trade[f"{ind_asset}_exit"] = ind_exit
                 trade['profit'] = profit
                 trade_log.append(trade)
-            active_trades = []
+
+            active_trades = []  # Close all trades
 
         # --- Trade Entry ---
         if prev_signal == 0 and current_signal != 0:
@@ -83,12 +78,15 @@ def run_backtest(data, signals_df, initial_capital, n_shares, commission, margin
 
             if current_signal == 1:
                 # LONG trade: Buy dependent asset, short independent asset.
-                entry_cost = (dep_price * qty_dep * (1 + commission)) + (ind_price * qty_ind * commission)
-                direction = 1
+                dep_entry_cost = dep_price * qty_dep * (1 + commission)  # Buying dependent
+                ind_entry_cost = ind_price * qty_ind * commission  # Shorting independent (no full cost)
             elif current_signal == -1:
                 # SHORT trade: Short dependent asset, buy independent asset.
-                entry_cost = (dep_price * qty_dep * commission) + (ind_price * qty_ind * (1 + commission))
-                direction = -1
+                dep_entry_cost = dep_price * qty_dep * commission  # Shorting dependent (no full cost)
+                ind_entry_cost = ind_price * qty_ind * (1 + commission)  # Buying independent
+
+            entry_cost = dep_entry_cost + ind_entry_cost
+            direction = current_signal
 
             if capital >= entry_cost and capital > margin_cap:
                 capital -= entry_cost
