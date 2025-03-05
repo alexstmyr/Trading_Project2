@@ -44,7 +44,6 @@ kf_model = kf.KalmanFilterReg()
 dynamic_hedge_ratios = kf_model.run_kalman_filter(data[tickers[0]].values, data[tickers[1]].values)
 
 # Compute dynamic spread using the dynamic hedge ratio.
-# dynamic_spread = MSFT - (dynamic β)*AMD.
 dynamic_spread = beta_x * data[tickers[0]] + beta_y * data[tickers[1]]
 
 # Save dynamic hedge ratios for reference.
